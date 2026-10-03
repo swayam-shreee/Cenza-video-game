@@ -34,6 +34,15 @@ per-device, so two identical controllers don't conflict.
 **Default gamepad layout:** left stick/D-pad move, A jump, X light, B heavy,
 right trigger block, Y Power 1, RB Power 2, LB special.
 
+**Menus with a controller:** D-pad or left stick moves between buttons, A selects, B goes
+back. Start pauses and resumes a match. B only backs out of menus; during a match it stays
+heavy attack.
+
+**Wired and Bluetooth together:** pads are numbered in the order they connect, so the first
+controller connected is P1. On Linux, Xbox controllers over Bluetooth may not show up at all
+(the kernel logs `unbalanced collection ... error -22` for older firmware). Installing the
+[xpadneo](https://github.com/atar-axis/xpadneo) driver fixes it; the game needs no changes.
+
 **Default keyboard:**
 | | Player 1 | Player 2 |
 |---|---|---|

@@ -107,6 +107,7 @@ var bot_memory: Dictionary = {}
 var participating: bool = true
 var stage_bounds: Rect2 = Rect2(290, 500, 700, 40)
 var _bot_state: Dictionary = {}
+var input_grace_left: float = 0.0  # ignore new presses briefly after a menu closes
 var _bot_prev: Dictionary = {}
 
 
@@ -165,6 +166,8 @@ func _pressed(action: String) -> bool:
 
 
 func _just_pressed(action: String) -> bool:
+	if input_grace_left > 0.0:
+		return false
 	if is_bot:
 		return _bot_state.get(action, false) and not _bot_prev.get(action, false)
 	return Input.is_action_just_pressed(_p(action))
@@ -312,6 +315,7 @@ func _tick_timers(delta: float) -> void:
 		modulate.a = 0.45 if int(invuln_left * 12.0) % 2 == 0 else 1.0
 		if invuln_left <= 0.0:
 			modulate.a = 1.0
+	input_grace_left = max(input_grace_left - delta, 0.0)
 	parry_cooldown_left = max(parry_cooldown_left - delta, 0.0)
 	parry_flash_left = max(parry_flash_left - delta, 0.0)
 	regen_delay_left = max(regen_delay_left - delta, 0.0)
