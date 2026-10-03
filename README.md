@@ -1,87 +1,83 @@
-# Brawl Fighter (stage 4)
+# Brawl Fighter (stage 6)
 
 Godot 4.3+ project. Open Godot, click **Import**, select `project.godot`, then press **F5**.
 
-All five characters are in. Everything about a fighter now comes from `characters.gd`.
+The game now opens on a title screen with full menus. Every control is rebindable and
+your bindings are saved to disk.
 
-## Controls
+## Screens
+Title → Choose your fighters → Pick a stage → Match → Results.
+**Escape** pauses during a match and backs out of any menu.
+
+## Controls menu
+Title → Controls, or pause mid-match → Controls.
+
+- Pick which player you're editing with the **P1 P2 P3 P4** buttons at the top.
+- **Set** replaces a binding, **Add** gives the action a second binding (so one action can
+  have both a key and a gamepad button), **Clear** unbinds it.
+- Press the key, button, stick direction or trigger you want. **Escape** cancels.
+- If the input is already used elsewhere it still binds, and tells you what else uses it.
+- **Reset to defaults** per player or for everything.
+
+Bindings save immediately to `user://settings.cfg`. On Linux that's
+`~/.local/share/godot/app_userdata/Brawl Fighter/settings.cfg`.
+
+### Controllers
+Any controller Godot recognizes works — Xbox, PlayStation, or a generic pad. The controls
+screen lists what's plugged in, and names buttons the way **your** controller labels them:
+an Xbox pad shows `A B X Y LB RB`, a PlayStation pad shows `Cross Circle Square Triangle L1 R1`.
+Plug a pad in and it appears in the menu right away.
+
+Each player defaults to the matching pad: P1 uses pad 1, P2 pad 2, and so on. Bindings are
+per-device, so two identical controllers don't conflict.
+
+**Default gamepad layout:** left stick/D-pad move, A jump, X light, B heavy,
+right trigger block, Y Power 1, RB Power 2, LB special.
+
+**Default keyboard:**
 | | Player 1 | Player 2 |
 |---|---|---|
 | Move | A / D | Left / Right |
-| Jump (again in air = double jump) | W or Space | Up |
-| Fast fall / drop through platform | S | Down |
-| Light attack | F | / |
-| Heavy attack | G | . |
-| Block / parry | C | , |
+| Jump | W or Space | Up |
+| Down / fast fall | S | Down |
+| Light | F | / |
+| Heavy | G | . |
+| Block | C | , |
 | Power 1 | Q | ; |
 | Power 2 | E | ' |
-| Movement special | V | L |
+| Special | V | L |
 
-Hold **up** (W / Up) or **down** (S / Down) while attacking for the up or down version.
-**1-5** picks Player 1's character, **6-0** picks Player 2's. **R** restarts.
+## Stages
+Four maps, pickable before each match:
 
-Character order: 1 Timmy, 2 Sway, 3 Wham, 4 Ando, 5 Jwong.
+- **Battlefield** — big center platform with three float platforms. The all-rounder.
+- **Flat Zone** — one long platform, nowhere to hide. Favors heavy hitters like Ando.
+- **Twin Towers** — two raised towers over a gap. Miss the ledge and you have to climb out.
+- **Skyline** — scattered small platforms, almost no safe ground. Recovery tools matter,
+  so Timmy and Sway shine here.
 
-## The roster
-
-| | Speed | Weight | Light / Heavy | Power 1 | Power 2 | Shield | Special |
-|---|---|---|---|---|---|---|---|
-| **Timmy** (staff) | 320 | 1.00 | 6 / 13 | Fireball (4s) | Lightning Net, roots 1.3s (9s) | standard | Web swing |
-| **Sway** (hidden blade) | 365 | 1.15 | 4.5 / 11 | Throwing Knife (2.5s) | Chained Sword, huge reach (7s) | parry only | Invisible dash |
-| **Wham** (scythe) | 335 | 1.00 | 7 / 15 | Ice Freeze, 1s freeze (8s) | Mimic, copies last attacker's Power 1 (6s) | ice | — |
-| **Ando** (hammer) | 345 | 0.95 | 8 / 18 | Shield Throw, returns (5s) | Teleport Swap (10s) | standard | — |
-| **Jwong** (shield) | 275 | 0.78 | 7.5 / 14 | Glowing Orb (5s) | Release stored power (1s) | absorb | — |
-
-**Weight** is the knockback multiplier. Jwong at 0.78 gets launched far less than anyone
-(that's how "high health" is modeled in a damage % game). Sway at 1.15 flies the furthest.
-Fast characters hit softer, slow ones hit much harder: Ando's heavy does 4x Sway's light.
-
-## How each special works
-- **Timmy's web swing** (V): fires a web at the nearest platform above him within 420px and
-  yanks him to it, gravity off for a moment. 1.2s cooldown. Good for recovering off-stage.
-- **Timmy's lightning net**: roots the target for 1.3s. They can't move or jump but can still
-  attack and block. Purple shackles show it.
-- **Sway's invisible dash** (V): 900px/s dash, untargetable the whole time, 1.6s cooldown.
-  His shield is parry-only, so tapping block opens a 0.14s window and nothing else. A
-  successful parry becomes an automatic dash away from the attacker.
-- **Wham's mimic**: copies the Power 1 of whoever last hit him and fires it himself. If nobody
-  has hit him yet, it falls back to the nearest opponent's Power 1.
-- **Wham's ice shield**: anyone whose attack lands on his shield gets frozen for 0.8s.
-- **Ando's shield throw**: flies out 430px, then homes back to him. It can hit on the way out
-  and on the way back.
-- **Ando's teleport swap**: he and the nearest opponent trade places. Throw someone off-stage,
-  then swap with them while they're out there.
-- **Jwong's absorb shield**: hold block and the first power that hits it is absorbed instead of
-  blocked, with no shield cost. A dot appears over his head. Press Power 2 to fire it back as
-  his own.
-
-## Try this
-1. Press `5` so P1 is Jwong and `3` so P2 is Wham. Have Wham fire Ice Freeze (`;`) at Jwong
-   while Jwong holds block (`C`) — Jwong absorbs it. Press `E` to fire it back.
-2. Press `1` for Timmy, jump off the side of the stage, then press `V` to web back up.
-3. Press `2` for Sway and tap `C` the instant an attack lands — he vanishes into a dash.
-4. Press `4` for Ando, knock someone off the edge, then press `E` to swap places with them.
-5. Hit Wham once, then have him press `E` — he throws your own Power 1 back at you.
-
-## Tuning
-Open `characters.gd`. Every number lives there: speed, weight, jump height, and for each move
-the damage, knockback, launch angle, startup/active/recovery timing, hitbox size and cooldown.
-The comment block at the top of the file explains each field. Nothing else needs editing.
-
-Shield and match rules (shield drain, parry window, stocks, respawn) are `@export` vars in
-`player.gd`.
+Adding a map is one entry in `stages.gd`: platforms, spawn points, blast zone, and the
+rectangle the CPU treats as safe ground. Nothing else needs changing.
 
 ## Files
-- `characters.gd` — all five fighters' data. This is the file to edit.
-- `player.gd` — runs a fighter: movement, the move state machine, shields, damage.
-- `projectile.gd` — flying hitboxes for fireball, knife, orb, ice, shield throw.
-- `main.gd` — stage, inputs, character select, HUD.
+| File | What it is |
+|---|---|
+| `game.gd` | screen flow: title, menus, pause, results |
+| `settings.gd` | control bindings, save/load, controller naming (autoloaded as `Settings`) |
+| `arena.gd` | runs one match from a stage + player setup |
+| `stages.gd` | **the map data — edit this to add stages** |
+| `characters.gd` | **the fighter data — edit this to rebalance** |
+| `player.gd` | runs a fighter: movement, moves, shields, damage |
+| `bot.gd` | the CPU brain |
+| `projectile.gd` | flying hitboxes |
 
 ## Known rough edges
+- Fighters are still colored rectangles. Art needs the animation system first (see below).
 - Projectiles pass through platforms.
-- Characters are still colored rectangles; the move system is the real work here.
-- Up attacks use the jump key held down, which takes a moment to get used to.
+- No sound yet.
+- Up attacks still use the jump button held down.
 
-## Next stages
-5. 3-4 players and CPU bots
-6. Menus, character select screen, more stages, sound
+## Next up
+7. Animation system, then artwork
+8. Sound
+9. Balance pass and exported builds

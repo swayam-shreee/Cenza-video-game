@@ -100,6 +100,15 @@ var stored_power: Dictionary = {}
 
 var _size := Vector2(40, 80)
 
+# --- bot control ---
+var is_bot: bool = false
+var bot_level: int = 1  # 0 easy, 1 normal, 2 hard
+var bot_memory: Dictionary = {}
+var participating: bool = true
+var stage_bounds: Rect2 = Rect2(290, 500, 700, 40)
+var _bot_state: Dictionary = {}
+var _bot_prev: Dictionary = {}
+
 
 func _ready() -> void:
 	# Players sit on layer 2 and collide only with platforms (layer 1), not each other.
@@ -148,6 +157,27 @@ func _p(action: String) -> String:
 	return "p%d_%s" % [player_id, action]
 
 
+# --- input: humans read the keyboard/gamepad, bots read what the brain decided ---
+func _pressed(action: String) -> bool:
+	if is_bot:
+		return _bot_state.get(action, false)
+	return Input.is_action_pressed(_p(action))
+
+
+func _just_pressed(action: String) -> bool:
+	if is_bot:
+		return _bot_state.get(action, false) and not _bot_prev.get(action, false)
+	return Input.is_action_just_pressed(_p(action))
+
+
+func _move_axis() -> float:
+	if is_bot:
+		var r := 1.0 if _bot_state.get("right", false) else 0.0
+		var l := 1.0 if _bot_state.get("left", false) else 0.0
+		return r - l
+	return Input.get_axis(_p("left"), _p("right"))
+
+
 func get_body_rect() -> Rect2:
 	return Rect2(global_position - _size / 2.0, _size)
 
@@ -178,8 +208,12 @@ func cooldown_text(slot: String) -> String:
 # MAIN LOOP
 # ===========================================================================
 func _physics_process(delta: float) -> void:
-	if is_eliminated:
+	if is_eliminated or not participating:
 		return
+
+	if is_bot:
+		_bot_prev = _bot_state.duplicate()
+		_bot_state = Bot.think(self, delta)
 
 	if respawn_left > 0.0:
 		respawn_left -= delta
@@ -212,7 +246,7 @@ func _physics_process(delta: float) -> void:
 
 	# --- horizontal movement ---
 	if can_move:
-		var dir := Input.get_axis(_p("left"), _p("right"))
+		var dir := _move_axis()
 		if dir != 0.0:
 			facing = 1 if dir > 0.0 else -1
 			queue_redraw()
@@ -239,12 +273,12 @@ func _physics_process(delta: float) -> void:
 		drop_through_left -= delta
 		if drop_through_left <= 0.0:
 			set_collision_mask_value(1, true)
-	if can_move and on_floor and Input.is_action_just_pressed(_p("down")) and _standing_on_one_way():
+	if can_move and on_floor and _just_pressed("down") and _standing_on_one_way():
 		set_collision_mask_value(1, false)
 		drop_through_left = 0.2
 
 	# --- jump ---
-	if can_move and Input.is_action_just_pressed(_p("jump")):
+	if can_move and _just_pressed("jump"):
 		if on_floor or coyote_left > 0.0:
 			velocity.y = jump_velocity
 			coyote_left = 0.0
@@ -256,7 +290,7 @@ func _physics_process(delta: float) -> void:
 	# --- gravity ---
 	if not on_floor and web_boost_left <= 0.0:
 		velocity.y += gravity * delta
-		if can_move and Input.is_action_just_pressed(_p("down")) and velocity.y > 0.0:
+		if can_move and _just_pressed("down") and velocity.y > 0.0:
 			fast_falling = true
 		var cap := fast_fall_speed if fast_falling else max_fall_speed
 		if not locked:
@@ -307,9 +341,9 @@ func _tick_timers(delta: float) -> void:
 # ACTIONS
 # ===========================================================================
 func _attack_direction() -> String:
-	if Input.is_action_pressed(_p("down")):
+	if _pressed("down"):
 		return "down"
-	if Input.is_action_pressed(_p("jump")):
+	if _pressed("jump"):
 		return "up"
 	return "side"
 
@@ -317,15 +351,15 @@ func _attack_direction() -> String:
 func _handle_action_input() -> void:
 	if is_attacking():
 		return
-	if Input.is_action_just_pressed(_p("light")):
+	if _just_pressed("light"):
 		_start_move(character.get("light_" + _attack_direction(), {}), "")
-	elif Input.is_action_just_pressed(_p("heavy")):
+	elif _just_pressed("heavy"):
 		_start_move(character.get("heavy_" + _attack_direction(), {}), "")
-	elif Input.is_action_just_pressed(_p("power1")):
+	elif _just_pressed("power1"):
 		_try_power("power1")
-	elif Input.is_action_just_pressed(_p("power2")):
+	elif _just_pressed("power2"):
 		_try_power("power2")
-	elif Input.is_action_just_pressed(_p("special")):
+	elif _just_pressed("special"):
 		_try_movement_special()
 
 
@@ -527,7 +561,7 @@ func _check_melee_hits() -> void:
 func _update_shield(delta: float, locked: bool) -> void:
 	if shield_type == SHIELD_PARRY_ONLY:
 		if not locked and shield_broken_left <= 0.0 and not is_attacking() \
-				and parry_cooldown_left <= 0.0 and Input.is_action_just_pressed(_p("block")):
+				and parry_cooldown_left <= 0.0 and _just_pressed("block"):
 			is_blocking = true
 			block_held_time = 0.0
 			parry_cooldown_left = parry_cooldown
@@ -538,7 +572,7 @@ func _update_shield(delta: float, locked: bool) -> void:
 			queue_redraw()
 		return
 
-	var want_block := Input.is_action_pressed(_p("block")) and not locked \
+	var want_block := _pressed("block") and not locked \
 			and shield_broken_left <= 0.0 and not is_attacking()
 
 	if want_block and shield_amount > 0.0:
@@ -738,9 +772,17 @@ func _draw() -> void:
 		col.a = 0.25
 	draw_rect(Rect2(-half, _size), col)
 
+	# Bots get a dark outline so you can tell them from humans.
+	if is_bot:
+		draw_rect(Rect2(-half, _size), Color(0.1, 0.1, 0.12, 0.9), false, 3.0)
+
 	# Eye shows facing direction.
 	var eye_x := 6.0 * facing - 4.0
 	draw_rect(Rect2(Vector2(eye_x, -half.y + 14), Vector2(8, 8)), Color.BLACK)
+
+	# Player number: one dot per player id, above the head.
+	for i in player_id:
+		draw_circle(Vector2(-6.0 * (player_id - 1) + 12.0 * i, -half.y - 12.0), 3.5, body_color)
 
 	# Root shackles.
 	if rooted_left > 0.0:
