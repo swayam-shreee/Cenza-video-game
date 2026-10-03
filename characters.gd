@@ -20,9 +20,14 @@ class_name Characters
 ##
 ## PROJECTILE EXTRAS
 ##   speed, life, proj_gravity, returns, max_travel, proj_size, color
+##   look          how it's drawn: "fireball", "net", "knife", "ice", "disc", "orb"
 ##
 ## SPECIAL ACTIONS (type "special")
 ##   action        "teleport_swap", "copy_last", or "absorb_release"
+##
+## CHARACTER FIELDS (besides the moves)
+##   weapon        what the stick figure holds: "staff", "blades", "scythe",
+##                 "hammer" or "shield". Purely visual.
 
 const SHIELD_STANDARD := "standard"
 const SHIELD_PARRY_ONLY := "parry_only"
@@ -55,6 +60,7 @@ static func M(overrides: Dictionary) -> Dictionary:
 		"max_travel": 400.0,
 		"proj_size": Vector2(24.0, 24.0),
 		"color": Color(1, 1, 1),
+		"look": "",
 		# special-only
 		"action": "",
 	}
@@ -78,6 +84,7 @@ static func get_by_index(i: int) -> Dictionary:
 static func timmy() -> Dictionary:
 	return {
 		"name": "Timmy",
+		"weapon": "staff",
 		"color": Color(0.95, 0.75, 0.2),
 		"move_speed": 320.0,
 		"jump_velocity": -640.0,
@@ -105,12 +112,12 @@ static func timmy() -> Dictionary:
 		"heavy_down": M({"name": "Staff Slam", "damage": 14.0, "kb_base": 400.0, "kb_growth": 8.5,
 			"angle": Vector2(0.8, -0.6), "startup": 0.18, "active": 0.10, "recovery": 0.30,
 			"offset": Vector2(52, 30), "size": Vector2(84, 40)}),
-		"power1": M({"name": "Fireball", "type": "projectile", "damage": 11.0,
+		"power1": M({"name": "Fireball", "type": "projectile", "look": "fireball", "damage": 11.0,
 			"kb_base": 360.0, "kb_growth": 7.0, "angle": Vector2(1.0, -0.45),
 			"startup": 0.16, "active": 0.05, "recovery": 0.26, "cooldown": 4.0,
 			"speed": 520.0, "life": 1.6, "proj_size": Vector2(26, 26),
 			"color": Color(1.0, 0.5, 0.15)}),
-		"power2": M({"name": "Lightning Net", "type": "projectile", "damage": 6.0,
+		"power2": M({"name": "Lightning Net", "type": "projectile", "look": "net", "damage": 6.0,
 			"kb_base": 120.0, "kb_growth": 2.0, "angle": Vector2(1.0, -0.2),
 			"startup": 0.22, "active": 0.05, "recovery": 0.32, "cooldown": 9.0,
 			"speed": 420.0, "life": 1.2, "proj_size": Vector2(46, 46),
@@ -124,6 +131,7 @@ static func timmy() -> Dictionary:
 static func sway() -> Dictionary:
 	return {
 		"name": "Sway",
+		"weapon": "blades",
 		"color": Color(0.55, 0.3, 0.75),
 		"move_speed": 365.0,
 		"jump_velocity": -660.0,
@@ -151,7 +159,7 @@ static func sway() -> Dictionary:
 		"heavy_down": M({"name": "Falling Blade", "damage": 12.0, "kb_base": 360.0, "kb_growth": 9.0,
 			"angle": Vector2(0.7, -0.5), "startup": 0.14, "active": 0.08, "recovery": 0.26,
 			"offset": Vector2(44, 28), "size": Vector2(58, 38)}),
-		"power1": M({"name": "Throwing Knife", "type": "projectile", "damage": 7.0,
+		"power1": M({"name": "Throwing Knife", "type": "projectile", "look": "knife", "damage": 7.0,
 			"kb_base": 250.0, "kb_growth": 5.0, "angle": Vector2(1.0, -0.35),
 			"startup": 0.10, "active": 0.05, "recovery": 0.18, "cooldown": 2.5,
 			"speed": 760.0, "life": 1.4, "proj_size": Vector2(22, 10),
@@ -168,6 +176,7 @@ static func sway() -> Dictionary:
 static func wham() -> Dictionary:
 	return {
 		"name": "Wham",
+		"weapon": "scythe",
 		"color": Color(0.35, 0.7, 1.0),
 		"move_speed": 335.0,
 		"jump_velocity": -635.0,
@@ -195,7 +204,7 @@ static func wham() -> Dictionary:
 		"heavy_down": M({"name": "Grave Slam", "damage": 16.0, "kb_base": 410.0, "kb_growth": 9.0,
 			"angle": Vector2(0.8, -0.55), "startup": 0.22, "active": 0.12, "recovery": 0.34,
 			"offset": Vector2(60, 30), "size": Vector2(100, 42)}),
-		"power1": M({"name": "Ice Freeze", "type": "projectile", "damage": 5.0,
+		"power1": M({"name": "Ice Freeze", "type": "projectile", "look": "ice", "damage": 5.0,
 			"kb_base": 100.0, "kb_growth": 2.0, "angle": Vector2(1.0, -0.2),
 			"startup": 0.18, "active": 0.05, "recovery": 0.28, "cooldown": 8.0,
 			"speed": 460.0, "life": 1.5, "proj_size": Vector2(30, 30),
@@ -211,6 +220,7 @@ static func wham() -> Dictionary:
 static func ando() -> Dictionary:
 	return {
 		"name": "Ando",
+		"weapon": "hammer",
 		"color": Color(0.9, 0.35, 0.35),
 		"move_speed": 345.0,
 		"jump_velocity": -625.0,
@@ -238,7 +248,7 @@ static func ando() -> Dictionary:
 		"heavy_down": M({"name": "Quake Slam", "damage": 19.0, "kb_base": 470.0, "kb_growth": 9.5,
 			"angle": Vector2(0.75, -0.5), "startup": 0.26, "active": 0.12, "recovery": 0.38,
 			"offset": Vector2(54, 30), "size": Vector2(92, 44)}),
-		"power1": M({"name": "Shield Throw", "type": "projectile", "damage": 12.0,
+		"power1": M({"name": "Shield Throw", "type": "projectile", "look": "disc", "damage": 12.0,
 			"kb_base": 330.0, "kb_growth": 6.5, "angle": Vector2(1.0, -0.4),
 			"startup": 0.14, "active": 0.05, "recovery": 0.24, "cooldown": 5.0,
 			"speed": 620.0, "life": 3.0, "returns": true, "max_travel": 430.0,
@@ -254,6 +264,7 @@ static func ando() -> Dictionary:
 static func jwong() -> Dictionary:
 	return {
 		"name": "Jwong",
+		"weapon": "shield",
 		"color": Color(0.4, 0.8, 0.5),
 		"move_speed": 275.0,
 		"jump_velocity": -600.0,
@@ -281,7 +292,7 @@ static func jwong() -> Dictionary:
 		"heavy_down": M({"name": "Fortress Slam", "damage": 15.0, "kb_base": 420.0, "kb_growth": 8.5,
 			"angle": Vector2(0.7, -0.55), "startup": 0.22, "active": 0.12, "recovery": 0.32,
 			"offset": Vector2(48, 30), "size": Vector2(80, 42)}),
-		"power1": M({"name": "Glowing Orb", "type": "projectile", "damage": 13.0,
+		"power1": M({"name": "Glowing Orb", "type": "projectile", "look": "orb", "damage": 13.0,
 			"kb_base": 380.0, "kb_growth": 7.5, "angle": Vector2(1.0, -0.45),
 			"startup": 0.20, "active": 0.05, "recovery": 0.30, "cooldown": 5.0,
 			"speed": 380.0, "life": 2.2, "proj_size": Vector2(38, 38),

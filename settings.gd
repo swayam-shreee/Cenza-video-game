@@ -41,28 +41,28 @@ func default_bindings() -> Dictionary:
 			d["p%d" % (i + 1)][a] = []
 
 	# Player 1: left-hand keyboard.
-	_set(d, 1, "left", [_key(KEY_A)])
-	_set(d, 1, "right", [_key(KEY_D)])
-	_set(d, 1, "jump", [_key(KEY_W), _key(KEY_SPACE)])
-	_set(d, 1, "down", [_key(KEY_S)])
-	_set(d, 1, "light", [_key(KEY_F)])
-	_set(d, 1, "heavy", [_key(KEY_G)])
-	_set(d, 1, "block", [_key(KEY_C)])
-	_set(d, 1, "power1", [_key(KEY_Q)])
-	_set(d, 1, "power2", [_key(KEY_E)])
-	_set(d, 1, "special", [_key(KEY_V)])
+	_set_binding(d, 1, "left", [_key(KEY_A)])
+	_set_binding(d, 1, "right", [_key(KEY_D)])
+	_set_binding(d, 1, "jump", [_key(KEY_W), _key(KEY_SPACE)])
+	_set_binding(d, 1, "down", [_key(KEY_S)])
+	_set_binding(d, 1, "light", [_key(KEY_F)])
+	_set_binding(d, 1, "heavy", [_key(KEY_G)])
+	_set_binding(d, 1, "block", [_key(KEY_C)])
+	_set_binding(d, 1, "power1", [_key(KEY_Q)])
+	_set_binding(d, 1, "power2", [_key(KEY_E)])
+	_set_binding(d, 1, "special", [_key(KEY_V)])
 
 	# Player 2: right-hand keyboard.
-	_set(d, 2, "left", [_key(KEY_LEFT)])
-	_set(d, 2, "right", [_key(KEY_RIGHT)])
-	_set(d, 2, "jump", [_key(KEY_UP)])
-	_set(d, 2, "down", [_key(KEY_DOWN)])
-	_set(d, 2, "light", [_key(KEY_SLASH)])
-	_set(d, 2, "heavy", [_key(KEY_PERIOD)])
-	_set(d, 2, "block", [_key(KEY_COMMA)])
-	_set(d, 2, "power1", [_key(KEY_SEMICOLON)])
-	_set(d, 2, "power2", [_key(KEY_APOSTROPHE)])
-	_set(d, 2, "special", [_key(KEY_L)])
+	_set_binding(d, 2, "left", [_key(KEY_LEFT)])
+	_set_binding(d, 2, "right", [_key(KEY_RIGHT)])
+	_set_binding(d, 2, "jump", [_key(KEY_UP)])
+	_set_binding(d, 2, "down", [_key(KEY_DOWN)])
+	_set_binding(d, 2, "light", [_key(KEY_SLASH)])
+	_set_binding(d, 2, "heavy", [_key(KEY_PERIOD)])
+	_set_binding(d, 2, "block", [_key(KEY_COMMA)])
+	_set_binding(d, 2, "power1", [_key(KEY_SEMICOLON)])
+	_set_binding(d, 2, "power2", [_key(KEY_APOSTROPHE)])
+	_set_binding(d, 2, "special", [_key(KEY_L)])
 
 	# Every player also gets the matching gamepad: P1 pad 1, P2 pad 2, and so on.
 	for i in PLAYERS:
@@ -84,7 +84,7 @@ func default_bindings() -> Dictionary:
 	return d
 
 
-func _set(d: Dictionary, player_num: int, action: String, events: Array) -> void:
+func _set_binding(d: Dictionary, player_num: int, action: String, events: Array) -> void:
 	d["p%d" % player_num][action] = events
 
 

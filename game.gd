@@ -20,7 +20,7 @@ var active_count: int = 2
 var slot_is_bot := [false, true, true, true]
 var slot_char := [0, 3, 2, 4]
 var slot_level := [1, 1, 1, 1]
-var stage_index: int = 0
+var stage_index: int = Stages.AIR_TEMPLE
 
 # --- rebinding state ---
 var rebind_player: int = 0      # 0 = not currently rebinding
@@ -65,8 +65,6 @@ func _input(event: InputEvent) -> void:
 				back_from_controls()
 			"char_select":
 				show_title()
-			"stage_select":
-				show_char_select()
 			"results":
 				show_title()
 
@@ -239,8 +237,21 @@ func show_char_select() -> void:
 	count_row.add_child(_button("+", change_count.bind(1), 42, 17))
 	box.add_child(count_row)
 
+	box.add_child(_spacer(6))
+	var stage := Stages.get_by_index(stage_index)
+	var map_row := _row()
+	map_row.add_child(_label("Map:", 16))
+	map_row.add_child(_button("<", cycle_stage.bind(-1), 34, 15))
+	var map_name := _label(str(stage.get("name", "Stage")), 18, Color(0.95, 0.85, 0.5))
+	map_name.custom_minimum_size = Vector2(150, 0)
+	map_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	map_row.add_child(map_name)
+	map_row.add_child(_button(">", cycle_stage.bind(1), 34, 15))
+	box.add_child(map_row)
+	box.add_child(_label(str(stage.get("blurb", "")), 12, Color(0.6, 0.65, 0.78)))
+
 	box.add_child(_spacer(10))
-	box.add_child(_button("Pick a stage  >", show_stage_select))
+	box.add_child(_button("FIGHT", start_match, 340, 24))
 	box.add_child(_button("Back", show_title))
 	_focus_first(box)
 
@@ -303,28 +314,9 @@ func change_count(delta: int) -> void:
 	show_char_select()
 
 
-# ===========================================================================
-# STAGE SELECT
-# ===========================================================================
-func show_stage_select() -> void:
-	screen = "stage_select"
-	_clear_ui()
-	var box := _panel("Pick a stage")
-	for i in Stages.count():
-		var s := Stages.get_by_index(i)
-		var marker := "> " if i == stage_index else "   "
-		box.add_child(_button(marker + str(s.get("name", "Stage")),
-				choose_stage.bind(i), 440, 18))
-		box.add_child(_label("      " + str(s.get("blurb", "")), 12, Color(0.6, 0.65, 0.78)))
-	box.add_child(_spacer(12))
-	box.add_child(_button("FIGHT", start_match, 440, 24))
-	box.add_child(_button("Back", show_char_select, 440))
-	_focus_first(box)
-
-
-func choose_stage(index: int) -> void:
-	stage_index = index
-	show_stage_select()
+func cycle_stage(direction: int) -> void:
+	stage_index = posmod(stage_index + direction, Stages.count())
+	show_char_select()
 
 
 # ===========================================================================
@@ -340,6 +332,8 @@ func start_match() -> void:
 	arena.slot_char = slot_char.duplicate()
 	arena.slot_level = slot_level.duplicate()
 	arena.match_over.connect(show_results)
+	# This node always runs (so Escape can unpause), but the match itself must pause.
+	arena.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(arena)
 	_unpause()
 	screen = "match"
@@ -374,7 +368,7 @@ func show_pause() -> void:
 	box.add_child(_button("Resume", resume))
 	box.add_child(_button("Controls", open_controls_from_pause))
 	box.add_child(_button("Restart match", restart_match))
-	box.add_child(_button("Change fighters", leave_match_to_select))
+	box.add_child(_button("Change fighters or map", leave_match_to_select))
 	box.add_child(_button("Quit to title", show_title))
 	_focus_first(box)
 
@@ -407,16 +401,9 @@ func show_results(result_text: String) -> void:
 	_clear_ui()
 	var box := _panel(result_text, str(Stages.get_by_index(stage_index).get("name", "")))
 	box.add_child(_button("Rematch", restart_match))
-	box.add_child(_button("Change fighters", leave_match_to_select))
-	box.add_child(_button("Change stage", leave_match_to_stage))
+	box.add_child(_button("Change fighters or map", leave_match_to_select))
 	box.add_child(_button("Quit to title", show_title))
 	_focus_first(box)
-
-
-func leave_match_to_stage() -> void:
-	_unpause()
-	_free_arena()
-	show_stage_select()
 
 
 # ===========================================================================

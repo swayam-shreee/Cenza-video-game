@@ -6,6 +6,10 @@ class_name Arena
 
 signal match_over(result_text: String)
 
+const VIEW := Vector2(1280, 720)
+# Camera framing: space kept around the fighters (left, top, right, bottom).
+const CAM_MARGIN := [260.0, 220.0, 260.0, 160.0]
+
 var stage_index: int = 0
 var active_count: int = 2
 var slot_is_bot := [false, true, true, true]
@@ -19,27 +23,86 @@ var power_labels: Dictionary = {}
 var shield_bars: Dictionary = {}
 var hud_layer: CanvasLayer
 var finished: bool = false
+var camera: Camera2D
+var shake_amount: float = 0.0
+var cam_limits: Rect2
+var min_zoom: float = 0.6
 
 
 func _ready() -> void:
 	stage = Stages.get_by_index(stage_index)
 	RenderingServer.set_default_clear_color(stage.get("bg", Color(0.09, 0.10, 0.16)))
+	# The camera follows the fighters and zooms out to fit them, never showing
+	# past the stage's camera limits.
+	cam_limits = Stages.camera_limits(stage)
+	min_zoom = clampf(maxf(VIEW.x / cam_limits.size.x, VIEW.y / cam_limits.size.y), 0.45, 1.0)
+	camera = Camera2D.new()
+	camera.process_callback = Camera2D.CAMERA2D_PROCESS_PHYSICS
+	add_child(camera)
+	camera.make_current()
+	var backdrop := _make_backdrop(str(stage.get("theme", "")))
+	if backdrop != null:
+		backdrop.set("stage", stage)
+		add_child(backdrop)
 	_build_stage()
 	for i in Settings.PLAYERS:
 		_spawn_player(i)
 	_build_hud()
+	_update_camera(0.0, true)
 
 
 func _exit_tree() -> void:
 	RenderingServer.set_default_clear_color(Color(0.07, 0.08, 0.12))
 
 
-func _draw() -> void:
-	var bz: Rect2 = stage.get("blast_zone", Rect2(-200, -250, 1680, 1170))
-	draw_rect(bz, Color(1, 0.3, 0.3, 0.3), false, 3.0)
+func shake(amount: float) -> void:
+	shake_amount = maxf(shake_amount, amount)
 
 
-func _process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
+	_update_camera(delta)
+
+
+func _update_camera(delta: float, snap: bool = false) -> void:
+	var box := Rect2()
+	var any := false
+	for p in players:
+		if not p.participating or p.is_eliminated or not p.visible:
+			continue
+		# Clamp first so a fighter flying off toward the blast zone can't drag the view out.
+		var at := p.global_position.clamp(cam_limits.position, cam_limits.end)
+		if any:
+			box = box.expand(at)
+		else:
+			box = Rect2(at, Vector2.ZERO)
+			any = true
+	if not any:
+		var mb: Rect2 = stage.get("main_bounds", Rect2(290, 500, 700, 40))
+		box = Rect2(mb.get_center(), Vector2.ZERO)
+	box = box.grow_individual(CAM_MARGIN[0], CAM_MARGIN[1], CAM_MARGIN[2], CAM_MARGIN[3])
+	var z := clampf(minf(VIEW.x / box.size.x, VIEW.y / box.size.y), min_zoom, 1.0)
+	if snap:
+		camera.zoom = Vector2(z, z)
+		camera.position = box.get_center()
+	else:
+		var zz := lerpf(camera.zoom.x, z, 1.0 - exp(-3.5 * delta))
+		camera.zoom = Vector2(zz, zz)
+		camera.position = camera.position.lerp(box.get_center(), 1.0 - exp(-5.0 * delta))
+	# Keep the actual view inside the limits.
+	var half := VIEW / camera.zoom.x * 0.5
+	camera.position = Vector2(
+		clampf(camera.position.x, cam_limits.position.x + half.x, maxf(cam_limits.end.x - half.x, cam_limits.position.x + half.x)),
+		clampf(camera.position.y, cam_limits.position.y + half.y, maxf(cam_limits.end.y - half.y, cam_limits.position.y + half.y)))
+	if snap:
+		camera.reset_smoothing()
+
+
+func _process(delta: float) -> void:
+	if shake_amount > 0.0:
+		shake_amount = move_toward(shake_amount, 0.0, delta * 45.0)
+		camera.offset = Vector2(randf_range(-1, 1), randf_range(-1, 1)) * shake_amount
+	else:
+		camera.offset = Vector2.ZERO
 	for i in Settings.PLAYERS:
 		var p := players[i]
 		var name_label: Label = name_labels[i]
@@ -108,7 +171,7 @@ func _spawn_player(index: int) -> void:
 func restart() -> void:
 	finished = false
 	for node in get_children():
-		if node is Projectile:
+		if node is Projectile or node is Effects:
 			node.queue_free()
 	for i in Settings.PLAYERS:
 		var p := players[i]
@@ -130,6 +193,7 @@ func restart() -> void:
 		p.collision_layer = 2 if p.participating else 0
 		p.modulate.a = 1.0
 		p.queue_redraw()
+	_update_camera(0.0, true)
 
 
 func _on_eliminated(_player: Player) -> void:
@@ -152,10 +216,27 @@ func _build_stage() -> void:
 	for entry in stage.get("platforms", []):
 		var d: Dictionary = entry
 		_add_platform(d.get("pos", Vector2.ZERO), d.get("size", Vector2(100, 20)),
-				d.get("one_way", false), d.get("color", Stages.SOLID))
+				d.get("one_way", false), d.get("color", Stages.SOLID), str(stage.get("theme", "")))
 
 
-func _add_platform(pos: Vector2, size: Vector2, one_way: bool, color: Color) -> void:
+func _make_backdrop(theme: String) -> Node2D:
+	match theme:
+		"air_temple":
+			return AirTempleBackdrop.new()
+		"neon_district":
+			return NeonDistrictBackdrop.new()
+	return null
+
+
+func _draw_themed_platform(theme: String, ci: CanvasItem, size: Vector2, one_way: bool) -> void:
+	match theme:
+		"air_temple":
+			AirTempleBackdrop.draw_platform(ci, size, one_way)
+		"neon_district":
+			NeonDistrictBackdrop.draw_platform(ci, size, one_way)
+
+
+func _add_platform(pos: Vector2, size: Vector2, one_way: bool, color: Color, theme: String = "") -> void:
 	var body := StaticBody2D.new()
 	body.position = pos
 	body.set_meta("one_way", one_way)
@@ -166,6 +247,12 @@ func _add_platform(pos: Vector2, size: Vector2, one_way: bool, color: Color) -> 
 	shape.shape = rect
 	shape.one_way_collision = one_way
 	body.add_child(shape)
+	if theme in ["air_temple", "neon_district"]:
+		var art := Node2D.new()
+		art.draw.connect(func(): _draw_themed_platform(theme, art, size, one_way))
+		body.add_child(art)
+		add_child(body)
+		return
 	var visual := Polygon2D.new()
 	var h := size / 2.0
 	visual.polygon = PackedVector2Array([
@@ -186,6 +273,7 @@ func _build_hud() -> void:
 		name_label.position = Vector2(x, 10)
 		name_label.size = Vector2(305, 46)
 		name_label.add_theme_font_size_override("font_size", 17)
+		_outline(name_label, 6)
 		hud_layer.add_child(name_label)
 		name_labels[i] = name_label
 
@@ -204,7 +292,8 @@ func _build_hud() -> void:
 		power_label.size = Vector2(300, 46)
 		power_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		power_label.add_theme_font_size_override("font_size", 11)
-		power_label.add_theme_color_override("font_color", Color(0.76, 0.8, 0.9))
+		power_label.add_theme_color_override("font_color", Color(0.86, 0.9, 0.98))
+		_outline(power_label, 4)
 		hud_layer.add_child(power_label)
 		power_labels[i] = power_label
 
@@ -215,4 +304,11 @@ func _build_hud() -> void:
 	stage_label.add_theme_font_size_override("font_size", 12)
 	stage_label.add_theme_color_override("font_color", Color(0.5, 0.55, 0.68))
 	stage_label.text = "%s     Esc to pause" % stage.get("name", "Stage")
+	_outline(stage_label, 4)
 	hud_layer.add_child(stage_label)
+
+
+func _outline(label: Label, size: int) -> void:
+	## Dark outline so HUD text reads on bright backdrops like the Air Temple sky.
+	label.add_theme_color_override("font_outline_color", Color(0.05, 0.06, 0.1, 0.9))
+	label.add_theme_constant_override("outline_size", size)

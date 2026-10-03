@@ -3,6 +3,7 @@ class_name Player
 ## Stage 4 player. Everything about a fighter now comes from a character config
 ## (see characters.gd): stats, six directional attacks, two powers, a shield type
 ## and an optional movement special. This script only runs that data.
+## The body is drawn and animated by a StickFigure child (stick_figure.gd).
 
 signal stock_lost(player: Player)
 signal eliminated(player: Player)
@@ -40,6 +41,9 @@ const SHIELD_ABSORB := "absorb"
 @export var freeze_on_block_time: float = 0.8
 @export var dodge_time: float = 0.22
 @export var dodge_speed: float = 620.0
+
+@export_group("Feel")
+@export var parry_hitstop: float = 0.12
 
 # --- character data (filled by set_character) ---
 var character: Dictionary = {}
@@ -85,6 +89,7 @@ var move_state: String = "idle"  # idle, startup, active, recovery
 var move_timer: float = 0.0
 var current_move: Dictionary = {}
 var current_slot: String = ""
+var current_move_key: String = ""  # e.g. "heavy_up" or "power1", used to pick the animation
 var move_hit_targets: Array = []
 var cooldowns: Dictionary = {"power1": 0.0, "power2": 0.0, "special": 0.0}
 
@@ -99,6 +104,8 @@ var parry_flash_left: float = 0.0
 var stored_power: Dictionary = {}
 
 var _size := Vector2(40, 80)
+var hitstop_left: float = 0.0  # brief freeze on big impacts
+var figure: StickFigure
 
 # --- bot control ---
 var is_bot: bool = false
@@ -120,6 +127,10 @@ func _ready() -> void:
 	rect.size = _size
 	shape.shape = rect
 	add_child(shape)
+	figure = StickFigure.new()
+	figure.player = self
+	figure.show_behind_parent = true  # shield bubble etc. draw on top of the body
+	add_child(figure)
 	if character.is_empty():
 		set_character(0)
 	air_jumps_left = max_air_jumps
@@ -150,6 +161,8 @@ func set_character(index: int) -> void:
 	rooted_left = 0.0
 	dodge_left = 0.0
 	air_jumps_left = max_air_jumps
+	if figure != null:
+		figure.reset()
 	queue_redraw()
 
 
@@ -183,7 +196,8 @@ func get_body_rect() -> Rect2:
 
 
 func can_be_hit() -> bool:
-	return not is_eliminated and respawn_left <= 0.0 and invuln_left <= 0.0 and dodge_left <= 0.0
+	return participating and not is_eliminated and respawn_left <= 0.0 and invuln_left <= 0.0 \
+			and dodge_left <= 0.0
 
 
 func is_attacking() -> bool:
@@ -209,6 +223,10 @@ func cooldown_text(slot: String) -> String:
 # ===========================================================================
 func _physics_process(delta: float) -> void:
 	if is_eliminated or not participating:
+		return
+
+	if hitstop_left > 0.0:
+		hitstop_left -= delta
 		return
 
 	if is_bot:
@@ -304,6 +322,7 @@ func _physics_process(delta: float) -> void:
 
 	if not blast_zone.has_point(global_position):
 		_lose_stock()
+	queue_redraw()
 
 
 func _tick_timers(delta: float) -> void:
@@ -352,9 +371,11 @@ func _handle_action_input() -> void:
 	if is_attacking():
 		return
 	if _just_pressed("light"):
-		_start_move(character.get("light_" + _attack_direction(), {}), "")
+		var key := "light_" + _attack_direction()
+		_start_move(character.get(key, {}), "", true, key)
 	elif _just_pressed("heavy"):
-		_start_move(character.get("heavy_" + _attack_direction(), {}), "")
+		var key := "heavy_" + _attack_direction()
+		_start_move(character.get(key, {}), "", true, key)
 	elif _just_pressed("power1"):
 		_try_power("power1")
 	elif _just_pressed("power2"):
@@ -372,11 +393,13 @@ func _try_power(slot: String) -> void:
 	_start_move(m, slot)
 
 
-func _start_move(m: Dictionary, slot: String, apply_cooldown: bool = true) -> void:
+func _start_move(m: Dictionary, slot: String, apply_cooldown: bool = true, key: String = "") -> void:
 	if m.is_empty():
 		return
 	current_move = m
 	current_slot = slot
+	if key != "" or slot != "":
+		current_move_key = key if key != "" else slot
 	move_state = "startup"
 	move_timer = m.get("startup", 0.07)
 	move_hit_targets.clear()
@@ -440,7 +463,12 @@ func _spawn_projectile(m: Dictionary) -> void:
 	var proj := Projectile.new()
 	proj.setup(self, m, facing)
 	get_parent().add_child(proj)
-	proj.global_position = global_position + Vector2(facing * 46.0, -6.0)
+	# Leave from the throwing hand, but never from behind the body.
+	var spawn := global_position + Vector2(facing * 46.0, -6.0)
+	if figure != null:
+		var hand := figure.hand_global()
+		spawn = Vector2(global_position.x + facing * maxf((hand.x - global_position.x) * facing, 24.0), hand.y)
+	proj.global_position = spawn
 
 
 func _get_copy_move() -> Dictionary:
@@ -477,7 +505,7 @@ func _nearest_opponent() -> Player:
 	var best_d := INF
 	for node in get_tree().get_nodes_in_group("players"):
 		var other := node as Player
-		if other == null or other == self or other.is_eliminated:
+		if other == null or other == self or other.is_eliminated or not other.participating:
 			continue
 		var d := global_position.distance_to(other.global_position)
 		if d < best_d:
@@ -622,9 +650,35 @@ func take_hit(attacker: Player, hit: Dictionary) -> void:
 
 	_apply_hit(hit)
 
+	# Impact: sparks at the contact point and a short freeze that sells the hit.
+	var dmg := float(hit.get("damage", 8.0))
+	var contact := global_position + Vector2(-signf(direction.x) * 14.0, -8.0)
+	var col: Color = attacker.body_color if attacker != null else Color.WHITE
+	Effects.hit_burst(get_parent(), contact, direction, col, (dmg - 4.0) / 14.0)
+	var stop := 0.03 + dmg * 0.003
+	hitstop_left = stop
+	if attacker != null and attacker != self and not hit.get("is_power", false):
+		attacker.hitstop_left = maxf(attacker.hitstop_left, stop)
+
 
 func _on_parry(attacker: Player) -> void:
 	parry_flash_left = 0.2
+	# Sparks fly from the clash point back toward the attacker; both fighters freeze.
+	var away := Vector2(-facing, -0.6)
+	var clash := global_position + Vector2(facing * 22.0, -14.0)
+	if attacker != null:
+		away = (attacker.global_position - global_position).normalized() + Vector2(0, -0.6)
+		clash = global_position.lerp(attacker.global_position, 0.35) + Vector2(0, -14.0)
+		attacker.hitstop_left = maxf(attacker.hitstop_left, parry_hitstop)
+	hitstop_left = parry_hitstop
+	var tint := Color(1.0, 0.85, 0.35)
+	if shield_type == SHIELD_FREEZE:
+		tint = Color(0.55, 0.9, 1.0)
+	elif shield_type == SHIELD_ABSORB:
+		tint = Color(0.6, 1.0, 0.7)
+	elif shield_type == SHIELD_PARRY_ONLY:
+		tint = body_color.lightened(0.3)
+	Effects.parry_burst(get_parent(), clash, away, tint)
 	if shield_type == SHIELD_PARRY_ONLY:
 		# Sway: the parry becomes a short invisible dash away from the attacker.
 		dodge_left = dodge_time
@@ -645,12 +699,16 @@ func _on_blocked_hit(attacker: Player, hit: Dictionary) -> void:
 		if m is Dictionary and not m.is_empty():
 			stored_power = m.duplicate(true)
 			stored_power["cooldown"] = 0.0
-			parry_flash_left = 0.2
+			Effects.absorb_swirl(get_parent(), global_position + Vector2(facing * 14.0, -10.0),
+					stored_power.get("color", Color(0.6, 1.0, 0.7)))
 			queue_redraw()
 			return
 
 	shield_amount -= shield_hit_cost
 	damage_percent += float(hit.get("damage", 8.0)) * shield_damage_through
+	var spark_col := Color(0.55, 0.9, 1.0) if shield_type == SHIELD_FREEZE else Color(0.5, 0.8, 1.0)
+	Effects.block_burst(get_parent(), global_position + Vector2(facing * 26.0, -8.0),
+			Vector2(facing, -0.4), spark_col)
 	velocity.x = 0.0
 	if shield_type == SHIELD_FREEZE and attacker != null:
 		attacker.apply_freeze(freeze_on_block_time)
@@ -665,6 +723,8 @@ func _apply_hit(hit: Dictionary) -> void:
 	var direction: Vector2 = hit.get("direction", Vector2(1, -0.5))
 	velocity = direction * kb
 	hitstun_left = clamp(kb / 2200.0, 0.12, 0.6)
+	if figure != null:
+		figure.on_hit(velocity)
 	fast_falling = false
 	is_blocking = false
 	web_boost_left = 0.0
@@ -724,6 +784,7 @@ func _lose_stock() -> void:
 	shield_broken_left = 0.0
 	dodge_left = 0.0
 	web_boost_left = 0.0
+	hitstop_left = 0.0
 	move_state = "idle"
 	current_move = {}
 	current_slot = ""
@@ -757,46 +818,8 @@ func _finish_respawn() -> void:
 # DRAWING
 # ===========================================================================
 func _draw() -> void:
+	## The body itself is the StickFigure child; this only draws overlays on top.
 	var half := _size / 2.0
-
-	# Web line while swinging.
-	if web_line_left > 0.0:
-		draw_line(Vector2.ZERO, to_local(web_target), Color(1, 1, 1, 0.8), 2.0)
-
-	var col := body_color
-	if frozen_left > 0.0:
-		col = col.lerp(Color(0.55, 0.85, 1.0), 0.6)
-	elif shield_broken_left > 0.0:
-		col = col.lerp(Color(0.6, 0.6, 0.6), 0.5)
-	elif dodge_left > 0.0:
-		col.a = 0.25
-	draw_rect(Rect2(-half, _size), col)
-
-	# Bots get a dark outline so you can tell them from humans.
-	if is_bot:
-		draw_rect(Rect2(-half, _size), Color(0.1, 0.1, 0.12, 0.9), false, 3.0)
-
-	# Eye shows facing direction.
-	var eye_x := 6.0 * facing - 4.0
-	draw_rect(Rect2(Vector2(eye_x, -half.y + 14), Vector2(8, 8)), Color.BLACK)
-
-	# Player number: one dot per player id, above the head.
-	for i in player_id:
-		draw_circle(Vector2(-6.0 * (player_id - 1) + 12.0 * i, -half.y - 12.0), 3.5, body_color)
-
-	# Root shackles.
-	if rooted_left > 0.0:
-		draw_rect(Rect2(Vector2(-half.x - 4, half.y - 16), Vector2(_size.x + 8, 16)), Color(0.7, 0.5, 1.0, 0.75))
-
-	# Melee hitbox: faint during startup, bright while active.
-	if move_state in ["startup", "active"] and current_move.get("type", "melee") == "melee":
-		var offset: Vector2 = current_move.get("offset", Vector2(52, 0))
-		var size: Vector2 = current_move.get("size", Vector2(60, 44))
-		var box := Rect2(Vector2(offset.x * facing, offset.y) - size / 2.0, size)
-		if move_state == "active":
-			draw_rect(box, Color(1, 1, 1, 0.35))
-		else:
-			draw_rect(box, Color(1, 1, 1, 0.12), false, 2.0)
 
 	# Shield bubble.
 	if is_blocking and shield_amount > 0.0:
@@ -810,14 +833,15 @@ func _draw() -> void:
 		elif shield_type == SHIELD_ABSORB:
 			bubble = Color(0.6, 1.0, 0.75, 0.35)
 		draw_circle(Vector2.ZERO, radius, bubble)
+		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 40, Color(bubble, 0.8), 2.0, true)
 
 	# Stored power marker (Jwong).
 	if not stored_power.is_empty():
-		draw_circle(Vector2(0, -half.y - 26), 8.0, stored_power.get("color", Color.WHITE))
-
-	# Parry flash.
-	if parry_flash_left > 0.0:
-		draw_circle(Vector2.ZERO, 70.0, Color(1.0, 1.0, 0.7, 0.5 * (parry_flash_left / 0.2)))
+		var bob := sin(Time.get_ticks_msec() * 0.006) * 3.0
+		var c := Vector2(0, -half.y - 30 + bob)
+		var sc: Color = stored_power.get("color", Color.WHITE)
+		draw_circle(c, 12.0, Color(sc, 0.25))
+		draw_circle(c, 7.0, sc)
 
 	# Shield-break stars.
 	if shield_broken_left > 0.0:
