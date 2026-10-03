@@ -43,7 +43,20 @@ func _ready() -> void:
 	ui_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	ui_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui_layer.add_child(ui_root)
+	_add_gamepad_menu_controls()
 	show_title()
+
+
+func _add_gamepad_menu_controls() -> void:
+	# Any pad's A button presses the focused menu button. (B and Start are handled in
+	# _input instead, because B is also heavy attack and must not pause a match.)
+	for e in InputMap.action_get_events("ui_accept"):
+		if e is InputEventJoypadButton and e.button_index == JOY_BUTTON_A:
+			return
+	var a := InputEventJoypadButton.new()
+	a.device = -1  # all devices
+	a.button_index = JOY_BUTTON_A
+	InputMap.action_add_event("ui_accept", a)
 
 
 # ===========================================================================
@@ -54,7 +67,24 @@ func _input(event: InputEvent) -> void:
 		_capture_rebind(event)
 		return
 
-	if event.is_action_pressed("ui_cancel"):
+	var pad_button := event as InputEventJoypadButton
+	var pad_pressed := pad_button != null and pad_button.pressed and not pad_button.is_echo()
+
+	# Start pauses and unpauses from any controller.
+	if pad_pressed and pad_button.button_index == JOY_BUTTON_START:
+		if screen == "match":
+			get_viewport().set_input_as_handled()
+			set_paused(true)
+			return
+		if screen == "pause":
+			get_viewport().set_input_as_handled()
+			resume()
+			return
+
+	# B backs out of menus, but stays a heavy attack during a match.
+	var pad_back := pad_pressed and pad_button.button_index == JOY_BUTTON_B and screen != "match"
+
+	if event.is_action_pressed("ui_cancel") or pad_back:
 		get_viewport().set_input_as_handled()
 		match screen:
 			"match":
@@ -332,10 +362,11 @@ func start_match() -> void:
 	arena.slot_char = slot_char.duplicate()
 	arena.slot_level = slot_level.duplicate()
 	arena.match_over.connect(show_results)
-	# This node always runs (so Escape can unpause), but the match itself must pause.
+	# This node runs while paused (for the menus); the match itself must not.
 	arena.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(arena)
 	_unpause()
+	_ignore_menu_press()
 	screen = "match"
 
 
@@ -358,7 +389,18 @@ func set_paused(value: bool) -> void:
 func resume() -> void:
 	_unpause()
 	_clear_ui()
+	_ignore_menu_press()
 	screen = "match"
+
+
+func _ignore_menu_press() -> void:
+	# The A press that picked "Resume" or "FIGHT" is also P1's jump, and B is heavy.
+	# Godot still reports that press as "just pressed" on the next physics tick, so
+	# fighters ignore new presses for a moment after a menu closes.
+	if arena == null or not is_instance_valid(arena):
+		return
+	for p in arena.players:
+		p.input_grace_left = 0.1
 
 
 func show_pause() -> void:
@@ -374,8 +416,8 @@ func show_pause() -> void:
 
 
 func open_controls_from_pause() -> void:
+	# Stay paused: the menus keep working because this node runs while paused.
 	came_from_pause = true
-	_unpause()
 	show_controls()
 
 
@@ -384,6 +426,7 @@ func restart_match() -> void:
 	_clear_ui()
 	if arena != null and is_instance_valid(arena):
 		arena.restart()
+	_ignore_menu_press()
 	screen = "match"
 
 
